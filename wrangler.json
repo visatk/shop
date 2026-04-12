@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "visatk",
+  "name": "idea",
   "compatibility_flags": [
     "nodejs_compat"
   ],
