@@ -37,9 +37,9 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  CardDescription
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { 
   CreditCard, 
   Home, 
@@ -47,7 +47,7 @@ import {
   ShoppingCart, 
   AlertTriangle, 
   Search,
-  Loader2
+  ServerCrash
 } from "lucide-react";
 import { Toaster, toast } from 'sonner';
 
@@ -59,10 +59,7 @@ interface BinDetails {
   type: string;
   category: string;
   issuer: string;
-  issuer_phone: string;
-  issuer_url: string;
   iso_code_2: string;
-  iso_code_3: string;
   country_name: string;
   flag: string;
 }
@@ -75,7 +72,6 @@ interface CardData {
   cvv: string;
   holder: string;
   bank: string;
-  company: string;
   city: string;
   state: string;
   country: string;
@@ -85,17 +81,13 @@ interface CardData {
   binDetails: BinDetails;
 }
 
-interface ApiDataResponse {
-  data: CardData[];
-}
-
-// --- Main Application Component ---
-function App() {
+// --- Component ---
+export default function App() {
   const [cards, setCards] = useState<CardData[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Search Form State
+  // Filter States
   const [bins, setBins] = useState('');
   const [base, setBase] = useState('All');
   const [exp, setExp] = useState('');
@@ -103,118 +95,114 @@ function App() {
   const [stateCode, setStateCode] = useState('');
   const [zipCode, setZipCode] = useState('');
   const [country, setCountry] = useState('All');
-  const [company, setCompany] = useState('All');
+  const [brand, setBrand] = useState('All');
   const [type, setType] = useState('All');
   
-  // Switches
-  const [ssnDob, setSsnDob] = useState(false);
-  const [mmn, setMmn] = useState(false);
-  const [address, setAddress] = useState(false);
-  const [phone, setPhone] = useState(false);
-  const [emailToggle, setEmailToggle] = useState(false);
+  // Feature Toggles (UI only for this scope)
+  const [toggles, setToggles] = useState({
+    ssnDob: false, mmn: false, address: false, phone: false, email: false
+  });
 
-  // Fetch initial data
-  useEffect(() => {
-    fetchCards({ limit: 50 });
-  }, []);
+  const handleToggle = (key: keyof typeof toggles) => (checked: boolean) => {
+    setToggles(prev => ({ ...prev, [key]: checked }));
+  };
 
-  const fetchCards = async (params: Record<string, string | number>) => {
+  // API Call using the Worker Proxy
+  const fetchCards = useCallback(async (params: Record<string, string | number> = { limit: 50 }) => {
     setLoading(true);
     setError(null);
     try {
       const queryParams = new URLSearchParams();
+      
+      // Clean up params: only send valid, non-'All' fields
       Object.entries(params).forEach(([key, value]) => {
-        if (value && value !== 'All') {
-          queryParams.append(key, String(value));
+        if (value && value !== 'All' && String(value).trim() !== '') {
+          queryParams.append(key, String(value).trim());
         }
       });
 
-      // We ensure the limit is always set if not provided in search
-      if (!queryParams.has('limit')) {
-         queryParams.append('limit', '50');
-      }
-
-      const response = await fetch(`https://gen.visatk.us/api/v1/cards?${queryParams.toString()}`);
+      // Crucial: We hit the relative path, so the Worker/Vite proxy intercepts it
+      const response = await fetch(`/api/v1/cards?${queryParams.toString()}`);
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`Worker returned status: ${response.status}`);
       }
       
-      const result: ApiDataResponse = await response.json();
-      setCards(result.data || []);
+      const result = await response.json();
       
-      if(result.data && result.data.length > 0) {
-          toast.success(`Loaded ${result.data.length} cards`);
+      if (!result.data) {
+        setCards([]);
+        toast.info("No results found.");
       } else {
-          toast.info("No cards found matching your criteria.");
+        setCards(result.data);
+        if (params.limit !== 50) toast.success(`Found ${result.data.length} cards matching criteria`);
       }
-      
     } catch (e: any) {
-      console.error("Failed to fetch cards", e);
-      setError("Failed to load data. Please try again.");
-      toast.error("Failed to fetch data from API");
+      console.error("Proxy fetch failed:", e);
+      setError("Unable to communicate with the edge network. Please try again later.");
+      toast.error("Network synchronization failed");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Initial Load
+  useEffect(() => {
+    fetchCards({ limit: 50 });
+  }, [fetchCards]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    const params: Record<string, string> = { limit: '20' };
     
-    const params: Record<string, string> = {};
-    
-    // Extract BIN prefix if multiple are comma separated, API might only support one but we'll take the first for now
-    if (bins.trim()) {
-        const firstBin = bins.split(',')[0].trim();
-        params.bin = firstBin;
-    }
-    
+    if (bins) params.bin = bins.split(',')[0]; // Assuming API takes one BIN prefix
     if (country !== 'All') params.country = country;
-    if (company !== 'All') params.brand = company; // Assuming company maps to brand in API
+    if (brand !== 'All') params.brand = brand;
     if (type !== 'All') params.type = type;
-    
-    // Limits
-    params.limit = '20'; // Example limit for search
 
     fetchCards(params);
   };
 
   const handleBuy = (card: CardData) => {
-    toast(`Purchase Initiated for ${card.binDetails.brand} ending in ${card.cardNumber.slice(-4)}`);
-  }
+    toast.success(`Processing purchase for ${card.binDetails.brand} ending in ${card.cardNumber.slice(-4)}`);
+  };
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <div className="flex min-h-screen w-full bg-[#1e232e] text-slate-200 font-sans selection:bg-blue-500/30">
-        <Toaster theme="dark" />
+    <SidebarProvider defaultOpen>
+      <div className="flex min-h-screen w-full bg-[#111318] text-slate-200 font-sans">
+        <Toaster theme="dark" position="top-right" />
         
-        {/* Navigation Sidebar */}
-        <Sidebar variant="sidebar" className="border-r-slate-800 bg-[#161a22]">
-          <SidebarHeader className="h-16 flex items-center px-6 border-b border-slate-800 text-xl font-bold tracking-tight text-white">
-            <CreditCard className="w-6 h-6 mr-2 text-blue-500" />
+        {/* Sidebar */}
+        <Sidebar variant="sidebar" className="border-r-slate-800/60 bg-[#161a22]">
+          <SidebarHeader className="h-16 flex items-center px-6 border-b border-slate-800/60 text-xl font-bold tracking-tight text-white">
+            <div className="bg-blue-600/20 p-1.5 rounded-lg mr-3 border border-blue-500/30">
+              <CreditCard className="w-5 h-5 text-blue-400" />
+            </div>
             Visatk
           </SidebarHeader>
           <SidebarContent>
             <SidebarGroup>
-              <SidebarGroupLabel className="text-slate-500 uppercase text-xs tracking-wider">Main Menu</SidebarGroupLabel>
+              <SidebarGroupLabel className="text-slate-500 uppercase text-[10px] tracking-widest font-semibold mt-4 mb-2">
+                Main Menu
+              </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>
-                    <SidebarMenuButton tooltip="Dashboard" className="hover:bg-slate-800 hover:text-white data-[active=true]:bg-blue-600 data-[active=true]:text-white transition-colors">
-                      <Home />
-                      <span>Dashboard</span>
+                    <SidebarMenuButton tooltip="Dashboard" className="hover:bg-slate-800 hover:text-white transition-colors h-10">
+                      <Home className="w-4 h-4" />
+                      <span className="font-medium">Dashboard</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
-                    <SidebarMenuButton isActive tooltip="Purchase Cards" className="hover:bg-slate-800 hover:text-white data-[active=true]:bg-blue-600/20 data-[active=true]:text-blue-400 transition-colors">
-                      <ShoppingCart />
-                      <span>Purchase Cards</span>
+                    <SidebarMenuButton isActive tooltip="Purchase Cards" className="bg-blue-600/10 text-blue-400 hover:bg-blue-600/20 hover:text-blue-300 transition-colors h-10">
+                      <ShoppingCart className="w-4 h-4" />
+                      <span className="font-medium">Marketplace</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
-                    <SidebarMenuButton tooltip="Settings" className="hover:bg-slate-800 hover:text-white transition-colors">
-                      <Settings />
-                      <span>Settings</span>
+                    <SidebarMenuButton tooltip="Settings" className="hover:bg-slate-800 hover:text-white transition-colors h-10">
+                      <Settings className="w-4 h-4" />
+                      <span className="font-medium">Account Settings</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </SidebarMenu>
@@ -223,287 +211,272 @@ function App() {
           </SidebarContent>
         </Sidebar>
 
-        <SidebarInset className="flex-1 flex flex-col bg-[#1e232e]">
-          
-          {/* Top Header */}
-          <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-800 bg-[#161a22] px-4 md:px-6 sticky top-0 z-10">
-            <SidebarTrigger className="text-slate-400 hover:text-white" />
-            <div className="w-full flex justify-between items-center ml-4">
-               <h1 className="text-lg font-semibold text-white">Purchase Cards</h1>
-               <div className="flex items-center gap-4">
-                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20 transition-colors">
-                    Claim your free card!
-                  </Badge>
-                  <div className="flex items-center gap-2 text-sm font-medium bg-[#1e232e] px-3 py-1.5 rounded-md border border-slate-700">
-                    <span className="text-emerald-400">$ 0.00</span>
-                    <button className="text-emerald-400 hover:text-emerald-300 w-5 h-5 flex items-center justify-center rounded-full hover:bg-emerald-500/20 transition-colors" aria-label="Add funds">+</button>
-                  </div>
-                  <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-sm font-bold border border-slate-600 cursor-pointer hover:bg-slate-600 transition-colors">
-                    H
-                  </div>
-               </div>
+        <SidebarInset className="flex-1 flex flex-col bg-[#111318]">
+          {/* Header */}
+          <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-800/60 bg-[#161a22]/80 backdrop-blur-md px-4 md:px-6 sticky top-0 z-20">
+            <div className="flex items-center gap-4">
+              <SidebarTrigger className="text-slate-400 hover:text-white transition-colors" />
+              <h1 className="text-sm font-medium text-slate-200 tracking-wide hidden sm:block">
+                Card Inventory
+              </h1>
+            </div>
+            <div className="flex items-center gap-3 md:gap-5">
+              <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors cursor-pointer px-3 py-1 text-xs hidden sm:flex">
+                Claim Free Card
+              </Badge>
+              <div className="flex items-center gap-2 bg-[#1e232e] px-3 py-1.5 rounded-lg border border-slate-700/50 shadow-inner">
+                <span className="text-emerald-400 text-sm font-semibold tracking-wide">$ 0.00</span>
+                <div className="h-4 w-px bg-slate-700 mx-1"></div>
+                <button className="text-emerald-400 hover:text-emerald-300 transition-colors" title="Add Funds">
+                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                </button>
+              </div>
+              <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-sm font-bold border-2 border-[#161a22] ring-2 ring-slate-800 shadow-md cursor-pointer hover:opacity-90 transition-opacity">
+                VH
+              </div>
             </div>
           </header>
 
-          <main className="p-4 md:p-6 lg:p-8 flex-1 overflow-auto max-w-7xl mx-auto w-full space-y-6">
-            
-            {/* Warning Note */}
-            <Card className="bg-[#161a22] border-rose-500/20 text-slate-300 shadow-sm">
-                <CardHeader className="pb-3">
-                    <CardTitle className="text-rose-400 flex items-center text-sm font-semibold tracking-wide">
-                        <AlertTriangle className="w-4 h-4 mr-2" /> Note
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm space-y-3 leading-relaxed">
-                    <p>Visatk only uses the following domains.</p>
-                    <div className="flex flex-wrap gap-2">
-                        <Badge variant="secondary" className="bg-slate-800 text-slate-300 hover:bg-slate-700">https://visatk.us/</Badge>
-                    </div>
-                    <p>All other domains are fake/scam. We do not sell on Telegram or any other social platform!</p>
-                </CardContent>
-            </Card>
+          <main className="p-4 md:p-6 lg:p-8 flex-1 overflow-auto max-w-[1600px] mx-auto w-full space-y-6">
+            {/* Alert / Notice */}
+            <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-4 flex items-start sm:items-center gap-3">
+              <div className="bg-rose-500/20 p-2 rounded-lg mt-0.5 sm:mt-0">
+                <AlertTriangle className="w-5 h-5 text-rose-400" />
+              </div>
+              <div className="text-sm text-rose-200/80 leading-relaxed">
+                <strong className="text-rose-300 font-semibold block sm:inline mr-1">Security Notice:</strong>
+                Our only official domain is <span className="bg-rose-950 px-1.5 py-0.5 rounded text-rose-300 border border-rose-800/50">visatk.us</span>. We do not operate via Telegram, Discord, or any other social platforms. Beware of impersonators.
+              </div>
+            </div>
 
-            {/* Filter Form */}
-            <Card className="bg-[#242938] border-slate-800 shadow-md">
-              <CardContent className="p-6">
-                <form onSubmit={handleSearch} className="space-y-6">
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {/* Column 1 */}
-                    <div className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="bins" className="text-slate-400 text-xs uppercase tracking-wider">BINs</Label>
-                            <Input 
-                                id="bins" 
-                                placeholder="Comma Separated (e.g. 414720)" 
-                                value={bins}
-                                onChange={(e) => setBins(e.target.value)}
-                                className="bg-[#1a1f2b] border-slate-700 text-slate-200 placeholder:text-slate-600 focus-visible:ring-blue-500/50"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="city" className="text-slate-400 text-xs uppercase tracking-wider">City</Label>
-                            <Input 
-                                id="city" 
-                                value={city}
-                                onChange={(e) => setCity(e.target.value)}
-                                className="bg-[#1a1f2b] border-slate-700 text-slate-200 focus-visible:ring-blue-500/50"
-                            />
-                        </div>
-                         <div className="space-y-2">
-                            <Label htmlFor="company" className="text-slate-400 text-xs uppercase tracking-wider">Brand <span className="text-rose-500">*</span></Label>
-                            <Select value={company} onValueChange={setCompany}>
-                                <SelectTrigger id="company" className="bg-[#1a1f2b] border-slate-700 text-slate-200">
-                                    <SelectValue placeholder="All" />
-                                </SelectTrigger>
-                                <SelectContent className="bg-[#1a1f2b] border-slate-700 text-slate-200">
-                                    <SelectItem value="All">All</SelectItem>
-                                    <SelectItem value="VISA">VISA</SelectItem>
-                                    <SelectItem value="MASTERCARD">MASTERCARD</SelectItem>
-                                    <SelectItem value="AMEX">AMEX</SelectItem>
-                                    <SelectItem value="DISCOVER">DISCOVER</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
+            {/* Advanced Search Filter */}
+            <Card className="bg-[#1a1e28] border-slate-800/60 shadow-xl overflow-hidden">
+              <CardContent className="p-0">
+                <form onSubmit={handleSearch} className="p-6 md:p-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-6">
+                    {/* Block 1 */}
+                    <div className="space-y-5">
+                      <div className="space-y-2">
+                        <Label htmlFor="bins" className="text-slate-400 text-xs font-semibold uppercase tracking-wider">BIN Prefix</Label>
+                        <Input id="bins" placeholder="e.g. 414720" value={bins} onChange={(e) => setBins(e.target.value)} className="bg-[#111318] border-slate-700/50 focus-visible:ring-blue-500/50 transition-all h-10" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="city" className="text-slate-400 text-xs font-semibold uppercase tracking-wider">City</Label>
+                        <Input id="city" placeholder="e.g. New York" value={city} onChange={(e) => setCity(e.target.value)} className="bg-[#111318] border-slate-700/50 focus-visible:ring-blue-500/50 transition-all h-10" />
+                      </div>
+                       <div className="space-y-2">
+                        <Label htmlFor="brand" className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Network Brand</Label>
+                        <Select value={brand} onValueChange={setBrand}>
+                          <SelectTrigger className="bg-[#111318] border-slate-700/50 h-10">
+                            <SelectValue placeholder="All Brands" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-[#1a1e28] border-slate-700">
+                            <SelectItem value="All">All Networks</SelectItem>
+                            <SelectItem value="VISA">VISA</SelectItem>
+                            <SelectItem value="MASTERCARD">MASTERCARD</SelectItem>
+                            <SelectItem value="AMEX">AMEX</SelectItem>
+                            <SelectItem value="DISCOVER">DISCOVER</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
 
-                    {/* Column 2 */}
-                    <div className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="base" className="text-slate-400 text-xs uppercase tracking-wider">Base <span className="text-rose-500">*</span></Label>
-                            <Select value={base} onValueChange={setBase}>
-                                <SelectTrigger id="base" className="bg-[#1a1f2b] border-slate-700 text-slate-200">
-                                    <SelectValue placeholder="All" />
-                                </SelectTrigger>
-                                <SelectContent className="bg-[#1a1f2b] border-slate-700 text-slate-200">
-                                    <SelectItem value="All">All</SelectItem>
-                                    <SelectItem value="APR#12_USA">APR#12_USA</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="stateCode" className="text-slate-400 text-xs uppercase tracking-wider">State</Label>
-                            <Input 
-                                id="stateCode" 
-                                value={stateCode}
-                                onChange={(e) => setStateCode(e.target.value)}
-                                className="bg-[#1a1f2b] border-slate-700 text-slate-200 focus-visible:ring-blue-500/50"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="type" className="text-slate-400 text-xs uppercase tracking-wider">Type</Label>
-                            <Select value={type} onValueChange={setType}>
-                                <SelectTrigger id="type" className="bg-[#1a1f2b] border-slate-700 text-slate-200">
-                                    <SelectValue placeholder="All" />
-                                </SelectTrigger>
-                                <SelectContent className="bg-[#1a1f2b] border-slate-700 text-slate-200">
-                                    <SelectItem value="All">All</SelectItem>
-                                    <SelectItem value="CREDIT">CREDIT</SelectItem>
-                                    <SelectItem value="DEBIT">DEBIT</SelectItem>
-                                    <SelectItem value="PREPAID">PREPAID</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
+                    {/* Block 2 */}
+                    <div className="space-y-5">
+                      <div className="space-y-2">
+                        <Label htmlFor="base" className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Database Base</Label>
+                        <Select value={base} onValueChange={setBase}>
+                          <SelectTrigger className="bg-[#111318] border-slate-700/50 h-10">
+                            <SelectValue placeholder="All Bases" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-[#1a1e28] border-slate-700">
+                            <SelectItem value="All">Any Base</SelectItem>
+                            <SelectItem value="APR#12_USA">APR#12_USA</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="stateCode" className="text-slate-400 text-xs font-semibold uppercase tracking-wider">State / Region</Label>
+                        <Input id="stateCode" placeholder="e.g. NY" value={stateCode} onChange={(e) => setStateCode(e.target.value)} className="bg-[#111318] border-slate-700/50 focus-visible:ring-blue-500/50 transition-all h-10" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="type" className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Card Type</Label>
+                        <Select value={type} onValueChange={setType}>
+                          <SelectTrigger className="bg-[#111318] border-slate-700/50 h-10">
+                            <SelectValue placeholder="All Types" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-[#1a1e28] border-slate-700">
+                            <SelectItem value="All">All Types</SelectItem>
+                            <SelectItem value="CREDIT">CREDIT</SelectItem>
+                            <SelectItem value="DEBIT">DEBIT</SelectItem>
+                            <SelectItem value="PREPAID">PREPAID</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
 
-                    {/* Column 3 */}
-                    <div className="space-y-4">
-                         <div className="space-y-2">
-                            <Label htmlFor="exp" className="text-slate-400 text-xs uppercase tracking-wider">EXP</Label>
-                            <Input 
-                                id="exp" 
-                                placeholder="MM/YYYY" 
-                                value={exp}
-                                onChange={(e) => setExp(e.target.value)}
-                                className="bg-[#1a1f2b] border-slate-700 text-slate-200 placeholder:text-slate-600 focus-visible:ring-blue-500/50"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="zipCode" className="text-slate-400 text-xs uppercase tracking-wider">ZIP Code</Label>
-                            <Input 
-                                id="zipCode" 
-                                value={zipCode}
-                                onChange={(e) => setZipCode(e.target.value)}
-                                className="bg-[#1a1f2b] border-slate-700 text-slate-200 focus-visible:ring-blue-500/50"
-                            />
-                        </div>
-                         <div className="space-y-2 pt-6">
-                           <div className="flex items-center space-x-2">
-                                <Switch 
-                                    id="ssn-dob" 
-                                    checked={ssnDob} 
-                                    onCheckedChange={setSsnDob}
-                                    className="data-[state=checked]:bg-blue-500"
-                                />
-                                <Label htmlFor="ssn-dob" className="text-slate-300 font-normal">SSN + DOB</Label>
-                            </div>
-                        </div>
+                    {/* Block 3 */}
+                    <div className="space-y-5">
+                       <div className="space-y-2">
+                        <Label htmlFor="exp" className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Expiration Date</Label>
+                        <Input id="exp" placeholder="MM/YYYY" value={exp} onChange={(e) => setExp(e.target.value)} className="bg-[#111318] border-slate-700/50 focus-visible:ring-blue-500/50 transition-all h-10" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="zipCode" className="text-slate-400 text-xs font-semibold uppercase tracking-wider">ZIP / Postal Code</Label>
+                        <Input id="zipCode" placeholder="e.g. 10001" value={zipCode} onChange={(e) => setZipCode(e.target.value)} className="bg-[#111318] border-slate-700/50 focus-visible:ring-blue-500/50 transition-all h-10" />
+                      </div>
                     </div>
 
-                    {/* Column 4 */}
-                    <div className="space-y-4">
-                        <div className="space-y-2 lg:mt-[4.5rem]">
-                            <Label htmlFor="country" className="text-slate-400 text-xs uppercase tracking-wider">Country <span className="text-rose-500">*</span></Label>
-                            <Select value={country} onValueChange={setCountry}>
-                                <SelectTrigger id="country" className="bg-[#1a1f2b] border-slate-700 text-slate-200">
-                                    <SelectValue placeholder="All" />
-                                </SelectTrigger>
-                                <SelectContent className="bg-[#1a1f2b] border-slate-700 text-slate-200">
-                                    <SelectItem value="All">All</SelectItem>
-                                    <SelectItem value="US">United States</SelectItem>
-                                    <SelectItem value="GB">United Kingdom</SelectItem>
-                                    <SelectItem value="CA">Canada</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
+                    {/* Block 4 */}
+                    <div className="space-y-5">
+                      <div className="space-y-2">
+                        <Label htmlFor="country" className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Issuing Country</Label>
+                        <Select value={country} onValueChange={setCountry}>
+                          <SelectTrigger className="bg-[#111318] border-slate-700/50 h-10">
+                            <SelectValue placeholder="All Countries" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-[#1a1e28] border-slate-700">
+                            <SelectItem value="All">Worldwide</SelectItem>
+                            <SelectItem value="US">United States</SelectItem>
+                            <SelectItem value="GB">United Kingdom</SelectItem>
+                            <SelectItem value="CA">Canada</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Extra Toggles Row */}
-                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-slate-700/50">
-                        <div className="flex items-center space-x-2">
-                            <Switch id="mmn" checked={mmn} onCheckedChange={setMmn} className="data-[state=checked]:bg-blue-500" />
-                            <Label htmlFor="mmn" className="text-slate-300 font-normal">MMN</Label>
+                  {/* Extras / Required Fields */}
+                  <div className="mt-8 pt-6 border-t border-slate-800/60 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div className="flex flex-wrap gap-x-8 gap-y-4">
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider w-full md:w-auto self-center">Require Data:</span>
+                      {[
+                        { id: 'ssnDob', label: 'SSN + DOB' },
+                        { id: 'mmn', label: 'MMN' },
+                        { id: 'address', label: 'Full Address' },
+                        { id: 'phone', label: 'Phone No.' },
+                        { id: 'email', label: 'Email Address' }
+                      ].map((item) => (
+                        <div key={item.id} className="flex items-center space-x-2">
+                          <Switch id={item.id} checked={toggles[item.id as keyof typeof toggles]} onCheckedChange={handleToggle(item.id as keyof typeof toggles)} className="data-[state=checked]:bg-blue-600 scale-90" />
+                          <Label htmlFor={item.id} className="text-slate-300 font-medium cursor-pointer">{item.label}</Label>
                         </div>
-                        <div className="flex items-center space-x-2">
-                            <Switch id="address" checked={address} onCheckedChange={setAddress} className="data-[state=checked]:bg-blue-500" />
-                            <Label htmlFor="address" className="text-slate-300 font-normal">Address</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                            <Switch id="phone" checked={phone} onCheckedChange={setPhone} className="data-[state=checked]:bg-blue-500" />
-                            <Label htmlFor="phone" className="text-slate-300 font-normal">Phone</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                            <Switch id="emailToggle" checked={emailToggle} onCheckedChange={setEmailToggle} className="data-[state=checked]:bg-blue-500" />
-                            <Label htmlFor="emailToggle" className="text-slate-300 font-normal">Email</Label>
-                        </div>
-                   </div>
+                      ))}
+                    </div>
 
-                  <div className="pt-2">
-                    <Button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-900/20 transition-all">
-                      {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
-                      Search Cards
+                    <Button type="submit" disabled={loading} className="w-full md:w-auto bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-900/20 transition-all h-10 px-8">
+                      {loading ? (
+                        <>
+                           <div className="w-4 h-4 mr-2 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                           Searching Edge...
+                        </>
+                      ) : (
+                        <>
+                          <Search className="w-4 h-4 mr-2" />
+                          Query Inventory
+                        </>
+                      )}
                     </Button>
                   </div>
                 </form>
               </CardContent>
             </Card>
 
-            {/* Results Table */}
-            <div className="rounded-xl border border-slate-800 bg-[#242938] overflow-hidden shadow-lg">
+            {/* Data Grid */}
+            <div className="rounded-xl border border-slate-800/60 bg-[#1a1e28] shadow-xl overflow-hidden relative min-h-[400px]">
               {error ? (
-                 <div className="p-8 text-center text-rose-400">
-                    <AlertTriangle className="w-8 h-8 mx-auto mb-2 opacity-80" />
-                    <p>{error}</p>
-                 </div>
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-[#1a1e28] z-10">
+                  <div className="bg-rose-500/10 p-4 rounded-full mb-4">
+                     <ServerCrash className="w-8 h-8 text-rose-500" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-200 mb-1">Connection Failed</h3>
+                  <p className="text-slate-400 max-w-sm">{error}</p>
+                  <Button variant="outline" onClick={() => fetchCards()} className="mt-6 border-slate-700 bg-transparent hover:bg-slate-800">
+                    Try Again
+                  </Button>
+                </div>
               ) : (
-                <Table>
-                  <TableHeader className="bg-[#1a1f2b]">
-                    <TableRow className="border-b border-slate-800 hover:bg-transparent">
-                      <TableHead className="text-slate-400 font-medium h-12">Expiration</TableHead>
-                      <TableHead className="text-slate-400 font-medium">Company</TableHead>
-                      <TableHead className="text-slate-400 font-medium">City</TableHead>
-                      <TableHead className="text-slate-400 font-medium">State</TableHead>
-                      <TableHead className="text-slate-400 font-medium">ZIP</TableHead>
-                      <TableHead className="text-slate-400 font-medium">Country</TableHead>
-                      <TableHead className="text-slate-400 font-medium">Bank</TableHead>
-                      <TableHead className="text-slate-400 font-medium text-right pr-6">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loading ? (
-                      <TableRow className="hover:bg-transparent border-slate-800">
-                        <TableCell colSpan={8} className="h-64 text-center">
-                          <div className="flex flex-col items-center justify-center text-slate-500">
-                             <Loader2 className="w-8 h-8 animate-spin mb-4 text-blue-500" />
-                             <p>Fetching latest inventory...</p>
-                          </div>
-                        </TableCell>
+                <div className="overflow-x-auto">
+                  <Table className="w-full">
+                    <TableHeader className="bg-[#111318]/80 sticky top-0 backdrop-blur-sm z-10 border-b border-slate-800/60">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="text-slate-400 font-semibold h-12 text-xs uppercase tracking-wider whitespace-nowrap px-6">EXP</TableHead>
+                        <TableHead className="text-slate-400 font-semibold text-xs uppercase tracking-wider whitespace-nowrap">Brand / Level</TableHead>
+                        <TableHead className="text-slate-400 font-semibold text-xs uppercase tracking-wider whitespace-nowrap">Location</TableHead>
+                        <TableHead className="text-slate-400 font-semibold text-xs uppercase tracking-wider whitespace-nowrap">Country</TableHead>
+                        <TableHead className="text-slate-400 font-semibold text-xs uppercase tracking-wider whitespace-nowrap">Issuing Bank</TableHead>
+                        <TableHead className="text-slate-400 font-semibold text-xs uppercase tracking-wider whitespace-nowrap text-right pr-6">Action</TableHead>
                       </TableRow>
-                    ) : cards.length === 0 ? (
-                      <TableRow className="hover:bg-transparent border-slate-800">
-                         <TableCell colSpan={8} className="h-48 text-center text-slate-500">
-                            No cards found matching your criteria.
-                         </TableCell>
-                      </TableRow>
-                    ) : (
-                      cards.map((card, index) => (
-                        <TableRow key={`${card.cardNumber}-${index}`} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
-                          <TableCell className="font-medium text-slate-300 py-4">
-                            {card.expMonth}/{card.expYear.slice(-2)}
-                          </TableCell>
-                          <TableCell className="text-slate-300">
-                            <div className="flex flex-col">
-                                <span className="font-semibold">{card.binDetails.brand}</span>
-                                <span className="text-xs text-slate-500">{card.binDetails.type} {card.binDetails.category !== 'TRADITIONAL' ? card.binDetails.category : ''}</span>
+                    </TableHeader>
+                    <TableBody>
+                      {loading ? (
+                        // Professional Loading Skeletons
+                        Array.from({ length: 10 }).map((_, i) => (
+                          <TableRow key={`skel-${i}`} className="border-b border-slate-800/40">
+                            <TableCell className="px-6 py-4"><Skeleton className="h-5 w-14 bg-slate-800" /></TableCell>
+                            <TableCell><div className="space-y-2"><Skeleton className="h-4 w-24 bg-slate-800" /><Skeleton className="h-3 w-16 bg-slate-800/60" /></div></TableCell>
+                            <TableCell><div className="space-y-2"><Skeleton className="h-4 w-28 bg-slate-800" /><Skeleton className="h-3 w-20 bg-slate-800/60" /></div></TableCell>
+                            <TableCell><Skeleton className="h-6 w-12 bg-slate-800" /></TableCell>
+                            <TableCell><Skeleton className="h-4 w-40 bg-slate-800" /></TableCell>
+                            <TableCell className="text-right pr-6"><Skeleton className="h-8 w-20 bg-slate-800 ml-auto" /></TableCell>
+                          </TableRow>
+                        ))
+                      ) : cards.length === 0 ? (
+                        <TableRow className="hover:bg-transparent border-0">
+                          <TableCell colSpan={6} className="h-[300px]">
+                            <div className="flex flex-col items-center justify-center text-slate-500">
+                              <Search className="w-10 h-10 mb-4 opacity-20" />
+                              <p className="text-lg">No inventory matches your filters.</p>
+                              <p className="text-sm mt-1">Try broadening your search criteria.</p>
                             </div>
                           </TableCell>
-                          <TableCell className="text-slate-400">{card.city || 'N/A'}</TableCell>
-                          <TableCell className="text-slate-400">{card.state || 'N/A'}</TableCell>
-                          <TableCell className="text-slate-400">{card.zip || 'N/A'}</TableCell>
-                          <TableCell>
-                             <div className="flex items-center gap-2">
-                                <span className="text-lg leading-none" title={card.binDetails.country_name}>{card.binDetails.flag}</span>
-                                <span className="text-slate-400">{card.binDetails.iso_code_2}</span>
-                             </div>
-                          </TableCell>
-                          <TableCell className="text-slate-400 max-w-[200px] truncate" title={card.bank}>
-                            {card.bank || 'Unknown'}
-                          </TableCell>
-                          <TableCell className="text-right pr-4">
-                            <Button 
-                                size="sm" 
-                                onClick={() => handleBuy(card)}
-                                className="bg-blue-600 hover:bg-blue-500 text-white font-medium shadow-sm transition-colors"
-                            >
-                              Buy {card.price}
-                            </Button>
-                          </TableCell>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+                      ) : (
+                        cards.map((card, index) => (
+                          <TableRow key={`${card.cardNumber}-${index}`} className="border-b border-slate-800/40 hover:bg-slate-800/20 transition-colors group">
+                            <TableCell className="font-semibold text-slate-300 py-3 px-6 whitespace-nowrap">
+                              {card.expMonth}/{card.expYear.slice(-2)}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className={`font-bold tracking-wide ${card.binDetails.brand === 'VISA' ? 'text-blue-400' : card.binDetails.brand === 'MASTERCARD' ? 'text-amber-400' : 'text-slate-200'}`}>
+                                  {card.binDetails.brand}
+                                </span>
+                                <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider mt-0.5">
+                                  {card.binDetails.type} {card.binDetails.category !== 'TRADITIONAL' ? `• ${card.binDetails.category}` : ''}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                               <div className="flex flex-col">
+                                  <span className="text-sm text-slate-300">{card.city || '—'}</span>
+                                  <span className="text-[11px] text-slate-500 mt-0.5">{card.state} {card.zip}</span>
+                               </div>
+                            </TableCell>
+                            <TableCell>
+                               <div className="flex items-center gap-2">
+                                  <span className="text-2xl leading-none drop-shadow-md" title={card.binDetails.country_name}>{card.binDetails.flag}</span>
+                                  <span className="text-xs font-medium text-slate-400">{card.binDetails.iso_code_2}</span>
+                               </div>
+                            </TableCell>
+                            <TableCell className="text-sm text-slate-400 max-w-[220px] truncate" title={card.bank}>
+                              {card.bank || 'Unknown Issuer'}
+                            </TableCell>
+                            <TableCell className="text-right pr-6 align-middle">
+                              <Button 
+                                  size="sm" 
+                                  onClick={() => handleBuy(card)}
+                                  className="bg-[#242a35] hover:bg-emerald-600/90 text-emerald-400 hover:text-white border border-slate-700/50 hover:border-emerald-500 font-medium shadow-sm transition-all group-hover:shadow-md"
+                              >
+                                Buy <span className="ml-1.5 opacity-80">{card.price}</span>
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
               )}
             </div>
             
@@ -513,5 +486,3 @@ function App() {
     </SidebarProvider>
   );
 }
-
-export default App;
