@@ -11,6 +11,9 @@
     "binding": "ASSETS",
     "run_worker_first": ["/api/*"]
   },
+  "placement": {
+    "mode": "smart",
+  },
   "d1_databases": [
     {
       "binding": "DB",
