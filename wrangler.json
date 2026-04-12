@@ -1,16 +1,32 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "idea",
-  "compatibility_date": "2026-04-11",
-  "compatibility_flags": ["nodejs_compat"],
+  "name": "visatk",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "compatibility_date": "2026-04-12",
   "main": "./worker/index.ts",
   "assets": {
     "not_found_handling": "single-page-application",
-    "run_worker_first": [
-      "/api/*"
-    ]
+    "run_worker_first": ["/api/*"]
   },
-  "observability": {
-    "enabled": true
-  }
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "marketplace_db",
+      "database_id": "ef36ee8a-589e-48c0-81b3-111762912758"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "DIGITAL_ASSETS",
+      "bucket_name": "digital-goods"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "CACHE_KV",
+      "id": "4364507baf164d75999e9c8fa4363488"
+    }
+  ]
 }
