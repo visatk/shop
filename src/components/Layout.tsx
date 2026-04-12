@@ -14,7 +14,7 @@ import {
   SidebarHeader
 } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
-import { CreditCard, Home, ShoppingCart, History, Wallet, BookOpen, MessageSquare, Menu } from "lucide-react";
+import { CreditCard, Home, ShoppingCart, History, Wallet, BookOpen, MessageSquare } from "lucide-react";
 
 export default function Layout() {
   const location = useLocation();
@@ -31,13 +31,13 @@ export default function Layout() {
 
   return (
     <SidebarProvider defaultOpen>
-      <div className="flex min-h-screen w-full bg-[#111318] text-slate-200 font-sans selection:bg-blue-500/30">
+      <div className="flex min-h-screen w-full bg-[#090B10] text-slate-200 font-sans">
         
-        {/* Mobile & Desktop Sidebar */}
-        <Sidebar variant="sidebar" className="border-r-slate-800/60 bg-[#161a22]">
-          <SidebarHeader className="h-16 flex items-center px-6 border-b border-slate-800/60 text-xl font-bold tracking-tight text-white cursor-pointer" onClick={() => navigate('/dashboard')}>
-            <div className="bg-blue-600/20 p-1.5 rounded-lg mr-3 border border-blue-500/30">
-              <CreditCard className="w-5 h-5 text-blue-400" />
+        {/* Sidebar */}
+        <Sidebar variant="sidebar" className="border-r border-[#1F2433] bg-[#11141D]">
+          <SidebarHeader className="h-16 flex items-center px-6 border-b border-[#1F2433] text-xl font-bold tracking-tight text-white cursor-pointer select-none" onClick={() => navigate('/dashboard')}>
+            <div className="bg-gradient-to-br from-blue-500 to-blue-700 p-1.5 rounded-lg mr-3 shadow-[0_0_15px_rgba(59,130,246,0.4)]">
+              <CreditCard className="w-5 h-5 text-white" />
             </div>
             Visatk
           </SidebarHeader>
@@ -55,10 +55,14 @@ export default function Layout() {
                         <SidebarMenuButton 
                           isActive={isActive}
                           onClick={() => navigate(item.path)}
-                          className={`h-11 md:h-10 transition-all ${isActive ? 'bg-blue-600/10 text-blue-400 hover:bg-blue-600/20 hover:text-blue-300 border-r-2 border-blue-500 rounded-r-none' : 'hover:bg-slate-800 hover:text-white'}`}
+                          className={`h-11 transition-all duration-200 outline-none ${
+                            isActive 
+                            ? 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/15 hover:text-blue-300 border-l-2 border-blue-500 rounded-none' 
+                            : 'hover:bg-[#1A1F2C] text-slate-400 hover:text-slate-200 border-l-2 border-transparent rounded-none'
+                          }`}
                         >
-                          <item.icon className="w-5 h-5 md:w-4 md:h-4 mr-2" />
-                          <span className="font-medium text-[15px] md:text-sm">{item.name}</span>
+                          <item.icon className={`w-4 h-4 mr-2 ${isActive ? 'text-blue-400' : 'text-slate-500'}`} />
+                          <span className="font-medium text-[14px]">{item.name}</span>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                     );
@@ -69,38 +73,40 @@ export default function Layout() {
           </SidebarContent>
         </Sidebar>
 
-        <SidebarInset className="flex-1 flex flex-col bg-[#111318] overflow-hidden">
-          {/* Mobile-Responsive Header */}
-          <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-800/60 bg-[#161a22]/95 backdrop-blur-md px-4 md:px-6 sticky top-0 z-30">
+        <SidebarInset className="flex-1 flex flex-col bg-[#090B10] overflow-hidden">
+          {/* Header */}
+          <header className="flex h-16 shrink-0 items-center justify-between border-b border-[#1F2433] bg-[#11141D]/90 backdrop-blur-xl px-4 md:px-6 sticky top-0 z-30">
             <div className="flex items-center gap-3">
-              <SidebarTrigger className="text-slate-400 hover:text-white transition-colors bg-slate-800/50 p-2 rounded-md md:bg-transparent md:p-0" />
-              <h1 className="text-base font-semibold text-slate-200 tracking-wide capitalize hidden sm:block md:text-sm md:font-medium">
+              <SidebarTrigger className="text-slate-400 hover:text-white transition-colors p-2 -ml-2 rounded-md" />
+              <h1 className="text-sm font-medium text-slate-200 tracking-wide capitalize hidden sm:block">
                 {location.pathname.replace('/', '').replace('-', ' ')}
               </h1>
             </div>
-            <div className="flex items-center gap-2 md:gap-5">
-              <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors cursor-pointer px-3 py-1 text-xs hidden lg:flex">
+            <div className="flex items-center gap-4">
+              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20 transition-colors cursor-pointer px-3 py-1 text-xs hidden lg:flex rounded-full">
                 Claim Free Card
               </Badge>
-              <div className="flex items-center gap-2 bg-[#1e232e] px-2 py-1 md:px-3 md:py-1.5 rounded-lg border border-slate-700/50 shadow-inner">
-                <Wallet className="w-4 h-4 text-emerald-400 sm:hidden" />
-                <span className="text-emerald-400 text-sm font-semibold tracking-wide">$ 0.00</span>
-                <div className="h-4 w-px bg-slate-700 mx-0.5 md:mx-1"></div>
-                <button onClick={() => navigate('/add-funds')} className="text-emerald-400 hover:text-emerald-300 transition-colors p-1" title="Add Funds">
+              <div className="flex items-center gap-3 bg-[#151822] px-3 py-1.5 rounded-full border border-[#1F2433] shadow-inner">
+                <div className="flex items-center gap-1.5">
+                  <Wallet className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-emerald-400 text-sm font-semibold tracking-wide">$ 0.00</span>
+                </div>
+                <div className="h-4 w-px bg-slate-700"></div>
+                <button onClick={() => navigate('/add-funds')} className="text-emerald-400 hover:text-emerald-300 transition-colors" title="Add Funds">
                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 </button>
               </div>
               <div 
                 onClick={() => navigate('/settings')}
-                className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-xs md:text-sm font-bold border-2 border-[#161a22] ring-2 ring-slate-800 shadow-md cursor-pointer hover:opacity-90 transition-opacity"
+                className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-sm font-bold border-2 border-[#11141D] ring-2 ring-[#1F2433] shadow-md cursor-pointer hover:opacity-90 transition-opacity"
               >
                 VH
               </div>
             </div>
           </header>
 
-          {/* Main Content Wrapper - Ensures scrolling works properly on mobile */}
-          <main className="p-3 sm:p-4 md:p-6 lg:p-8 flex-1 overflow-x-hidden overflow-y-auto w-full max-w-[1600px] mx-auto">
+          {/* Main Content */}
+          <main className="p-4 md:p-6 lg:p-8 flex-1 overflow-x-hidden overflow-y-auto w-full max-w-[1600px] mx-auto">
              <Outlet />
           </main>
         </SidebarInset>
