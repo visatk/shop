@@ -18,6 +18,11 @@
       "database_id": "ef36ee8a-589e-48c0-81b3-111762912758"
     }
   ],
+  "tail_consumers": [
+    {
+      "service": "tail-worker"
+    }
+  ],
   "r2_buckets": [
     {
       "binding": "DIGITAL_ASSETS",
