@@ -7,10 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertTriangle, Search, ServerCrash, CreditCard } from "lucide-react";
+import { AlertTriangle, Search, ServerCrash } from "lucide-react";
 import { toast } from 'sonner';
 
-// Interfaces...
 interface BinDetails { brand: string; type: string; category: string; iso_code_2: string; country_name: string; flag: string; }
 interface CardData { cardNumber: string; bin: string; expMonth: string; expYear: string; cvv: string; bank: string; city: string; state: string; zip: string; price: string; binDetails: BinDetails; }
 
@@ -18,8 +17,9 @@ export default function Marketplace() {
   const [cards, setCards] = useState<CardData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [purchasingId, setPurchasingId] = useState<string | null>(null);
 
-  // States...
+  // States
   const [bins, setBins] = useState('');
   const [base, setBase] = useState('All');
   const [exp, setExp] = useState('');
@@ -36,7 +36,8 @@ export default function Marketplace() {
   };
 
   const fetchCards = useCallback(async (params: Record<string, string | number> = { limit: 50 }) => {
-    setLoading(true); setError(null);
+    setLoading(true); 
+    setError(null);
     try {
       const queryParams = new URLSearchParams();
       Object.entries(params).forEach(([key, value]) => {
@@ -55,7 +56,9 @@ export default function Marketplace() {
     }
   }, []);
 
-  useEffect(() => { fetchCards({ limit: 50 }); }, [fetchCards]);
+  useEffect(() => { 
+    fetchCards({ limit: 50 }); 
+  }, [fetchCards]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,6 +68,40 @@ export default function Marketplace() {
     if (brand !== 'All') params.brand = brand;
     if (type !== 'All') params.type = type;
     fetchCards(params);
+  };
+
+  const handlePurchase = async (card: CardData) => {
+    const numericPrice = parseFloat(card.price.replace('$', ''));
+    
+    setPurchasingId(card.cardNumber);
+    const toastId = toast.loading(`Purchasing card ending in ${card.cardNumber.slice(-4)}...`);
+    
+    try {
+      const response = await fetch('/api/v1/purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cardId: card.cardNumber, price: numericPrice })
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || "Purchase failed");
+      }
+      
+      toast.success("Card purchased successfully!", { id: toastId });
+      
+      // Optimistically remove the purchased card from the UI
+      setCards(prev => prev.filter(c => c.cardNumber !== card.cardNumber));
+      
+      // Optionally trigger a balance update in a global state/context if you have one
+      window.dispatchEvent(new Event('balance-updated'));
+      
+    } catch (err: any) {
+      toast.error(err.message, { id: toastId });
+    } finally {
+      setPurchasingId(null);
+    }
   };
 
   const getBrandColor = (brand: string) => {
@@ -93,7 +130,6 @@ export default function Marketplace() {
         <CardContent className="p-0">
           <form onSubmit={handleSearch} className="p-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-5">
-              {/* Form elements with refined focus states and heights */}
               <div className="space-y-1.5">
                 <Label className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider">BIN Prefix</Label>
                 <Input placeholder="e.g. 414720" value={bins} onChange={(e) => setBins(e.target.value)} className="bg-[#090B10] border-[#1F2433] focus-visible:ring-1 focus-visible:ring-blue-500/50 h-9 text-sm placeholder:text-slate-600" />
@@ -176,7 +212,6 @@ export default function Marketplace() {
         </CardContent>
       </Card>
 
-      {/* Modern Data Table */}
       <div className="rounded-xl border border-[#1F2433] bg-[#151822] shadow-lg overflow-hidden relative min-h-[400px]">
         {error ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center z-10">
@@ -237,10 +272,15 @@ export default function Marketplace() {
                       <TableCell className="text-right pr-6 align-middle">
                         <Button 
                           size="sm" 
-                          onClick={() => toast.success('Added to cart')} 
-                          className="h-7 bg-transparent hover:bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:border-emerald-500/50 font-medium transition-all"
+                          onClick={() => handlePurchase(card)} 
+                          disabled={purchasingId === card.cardNumber}
+                          className="h-7 bg-transparent hover:bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:border-emerald-500/50 font-medium transition-all disabled:opacity-50"
                         >
-                          Buy <span className="ml-1 opacity-80">{card.price}</span>
+                          {purchasingId === card.cardNumber ? (
+                            <div className="w-3.5 h-3.5 border-2 border-emerald-400/20 border-t-emerald-400 rounded-full animate-spin" />
+                          ) : (
+                            <>Buy <span className="ml-1 opacity-80">{card.price}</span></>
+                          )}
                         </Button>
                       </TableCell>
                     </TableRow>
